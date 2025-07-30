@@ -1,67 +1,691 @@
+import copy
+
 class Game:
     def __init__(self):
+        # 7x7 grid where only 24 positions are available
         self.board = [['.' for i in range(7)] for i in range(7)]
-        self.tiles = {(0, 0), (0, 3), (0, 6), (1, 1), (1, 3), (1, 5), (2, 2), (2, 3), (2, 4), (3, 0), (3, 1), (3, 2),
-                      (3, 4), (3, 5), (3, 6), (4, 2), (4, 3), (4, 4), (5, 1), (5, 3), (5, 5), (6, 0), (6, 3), (6, 6)}
-        self.placed = 0
-        self.white = 0
-        self.black = 0
-        self.player = 'W'
+        
+        # Available positions (x, y) coordinates based on the image
+        self.tiles = {
+            # Outer Square (8 nodes)
+            (0, 0), (0, 3), (0, 6),  # Top row
+            (3, 6), (6, 6), (6, 3), (6, 0), (3, 0),  # Right, bottom, left sides
+            
+            # Middle Square (8 nodes)
+            (1, 1), (1, 3), (1, 5),  # Top row
+            (3, 5), (5, 5), (5, 3), (5, 1), (3, 1),  # Right, bottom, left sides
+            
+            # Inner Square (8 nodes)
+            (2, 2), (2, 3), (2, 4),  # Top row
+            (3, 4), (4, 4), (4, 3), (4, 2), (3, 2)   # Right, bottom, left sides
+        }
+        
+        # Game state
+        self.placed = 0  # Total pieces placed
+        self.white = 0   # White pieces on board
+        self.black = 0   # Black pieces on board
+        self.white_removed = 0  # White pieces removed
+        self.black_removed = 0  # Black pieces removed
+        self.player = 'W'  # Current player
         self.history = []
+        self.game_started = False  # Track if a game has been started
+        
+        # Define adjacency for each position based on the image
+        self.adjacency = {
+            # Outer Square (8 points)
+            (0, 0): [(0, 3), (3, 0)],
+            (0, 3): [(0, 0), (0, 6), (1, 3)],
+            (0, 6): [(0, 3), (3, 6)],
+            (3, 0): [(0, 0), (3, 1), (6, 0)],
+            (3, 6): [(0, 6), (3, 5), (6, 6)],
+            (6, 0): [(3, 0), (6, 3)],
+            (6, 3): [(5, 3), (6, 0), (6, 6)],
+            (6, 6): [(3, 6), (6, 3)],
+            
+            # Middle Square (8 points)
+            (1, 1): [(1, 3), (3, 1)],
+            (1, 3): [(0, 3), (1, 1), (1, 5), (2, 3)],
+            (1, 5): [(1, 3), (3, 5)],
+            (3, 1): [(1, 1), (3, 0), (3, 2), (5, 1)],
+            (3, 5): [(1, 5), (3, 4), (3, 6), (5, 5)],
+            (5, 1): [(3, 1), (5, 3)],
+            (5, 3): [(4, 3), (5, 1), (5, 5), (6, 3)],
+            (5, 5): [(3, 5), (5, 3)],
+            
+            # Inner Square (8 points)
+            (2, 2): [(2, 3), (3, 2)],
+            (2, 3): [(1, 3), (2, 2), (2, 4)],
+            (2, 4): [(2, 3), (3, 4)],
+            (3, 2): [(2, 2), (3, 1), (4, 2)],
+            (3, 4): [(2, 4), (3, 5), (4, 4)],
+            (4, 2): [(3, 2), (4, 3)],
+            (4, 3): [(2, 3), (4, 2), (4, 4), (5, 3)],
+            (4, 4): [(3, 4), (4, 3)]
+        }
+        
+        # Define all possible mills (three-in-a-row)
+        self.mills = [
+            # Horizontal mills
+            [(0, 0), (0, 3), (0, 6)],
+            [(1, 1), (1, 3), (1, 5)],
+            [(2, 2), (2, 3), (2, 4)],
+            [(3, 0), (3, 1), (3, 2)],
+            [(3, 4), (3, 5), (3, 6)],
+            [(4, 2), (4, 3), (4, 4)],
+            [(5, 1), (5, 3), (5, 5)],
+            [(6, 0), (6, 3), (6, 6)],
+            # Vertical mills
+            [(0, 0), (3, 0), (6, 0)],
+            [(1, 1), (3, 1), (5, 1)],
+            [(2, 2), (3, 2), (4, 2)],
+            [(0, 3), (1, 3), (2, 3)],
+            [(4, 3), (5, 3), (6, 3)],
+            [(2, 4), (3, 4), (4, 4)],
+            [(1, 5), (3, 5), (5, 5)],
+            [(0, 6), (3, 6), (6, 6)]
+        ]
 
     def start(self):
+        """Reset the game to initial state"""
         self.board = [['.' for i in range(7)] for i in range(7)]
         self.placed = 0
         self.white = 0
         self.black = 0
+        self.white_removed = 0
+        self.black_removed = 0
         self.player = 'W'
         self.history = []
+        self.game_started = True
 
-    def switch(self):
-        if self.player == 'W':
-            self.player = 'B'
-        else:
-            self.player = 'W'
+    def switch_player(self):
+        """Switch to the other player"""
+        self.player = 'B' if self.player == 'W' else 'W'
+
+    def is_placement_phase(self):
+        """Check if we're still in the placement phase"""
+        return self.placed < 18
 
     def place(self, x, y):
-        if self.placed > 17 or (x, y) not in self.tiles or self.board[y][x] != '.':
-            return False
+        """Place a piece at the given coordinates"""
+        if self.placed >= 18:
+            return False, "All pieces have been placed"
+        
+        if (x, y) not in self.tiles:
+            return False, "Invalid position"
+        
+        if self.board[y][x] != '.':
+            return False, "Position already occupied"
+        
+        # Place the piece
         self.board[y][x] = self.player
         self.placed += 1
         if self.player == 'W':
             self.white += 1
         else:
             self.black += 1
-        self.history.append((x, y, None, None))
-        return True
+        
+        # Check for mill formation
+        mill_formed = self.check_mill(x, y)
+        
+        # Record the move
+        self.history.append(('place', x, y, None, mill_formed))
+        
+        # Switch player (unless a mill was formed, then same player gets another turn)
+        if not mill_formed:
+            self.switch_player()
+        
+        return True, "Piece placed successfully" + (" - Mill formed!" if mill_formed else "")
 
     def move(self, x, y, nx, ny):
-        if (self.placed < 18 or (x, y) not in self.tiles or (nx, ny) not in self.tiles
-                or self.board[y][x] != self.player or self.board[ny][nx] != '.'):
-            return False
+        """Move a piece from (x,y) to (nx,ny)"""
+        if self.placed < 18:
+            return False, "Still in placement phase"
+        
+        if (x, y) not in self.tiles or (nx, ny) not in self.tiles:
+            return False, "Invalid position"
+        
+        if self.board[y][x] != self.player:
+            return False, "No piece of current player at source position"
+        
+        if self.board[ny][nx] != '.':
+            return False, "Destination position is occupied"
+        
+        # Check if move is valid (adjacent or flying)
+        if not self.is_valid_move(x, y, nx, ny):
+            return False, "Invalid move - positions not adjacent"
+        
+        # Move the piece
         self.board[y][x] = '.'
         self.board[ny][nx] = self.player
-        self.history.append((x, y, nx, ny))
-        return True
-    
+        
+        # Check for mill formation
+        mill_formed = self.check_mill(nx, ny)
+        
+        # Record the move
+        self.history.append(('move', x, y, nx, ny, mill_formed))
+        
+        # Switch player (unless a mill was formed, then same player gets another turn)
+        if not mill_formed:
+            self.switch_player()
+        
+        return True, "Piece moved successfully" + (" - Mill formed!" if mill_formed else "")
+
+    def is_valid_move(self, x, y, nx, ny):
+        """Check if a move is valid"""
+        # If player has only 3 pieces left, they can fly (move anywhere)
+        pieces_on_board = self.white if self.player == 'W' else self.black
+        if pieces_on_board <= 3:
+            return True
+        
+        # Otherwise, must move to adjacent position
+        return (nx, ny) in self.adjacency[(x, y)]
+
+    def check_mill(self, x, y):
+        """Check if placing/moving a piece at (x,y) forms a mill"""
+        player = self.board[y][x]
+        for mill in self.mills:
+            if (x, y) in mill:
+                if all(self.board[pos[1]][pos[0]] == player for pos in mill):
+                    return True
+        return False
+
+    def remove_piece(self, x, y):
+        """Remove an opponent's piece (after forming a mill)"""
+        if (x, y) not in self.tiles:
+            return False, "Invalid position"
+        
+        opponent = 'B' if self.player == 'W' else 'W'
+        if self.board[y][x] != opponent:
+            return False, "No opponent piece at that position"
+        
+        # Check if piece is in a mill (can only remove if no other pieces available)
+        if self.is_in_mill(x, y, opponent):
+            # Check if all opponent pieces are in mills
+            opponent_positions = [(x, y) for x in range(7) for y in range(7) 
+                                if self.board[y][x] == opponent]
+            if all(self.is_in_mill(pos[0], pos[1], opponent) for pos in opponent_positions):
+                pass  # Can remove from mill
+            else:
+                return False, "Cannot remove piece from mill unless all pieces are in mills"
+        
+        # Remove the piece
+        self.board[y][x] = '.'
+        if opponent == 'W':
+            self.white -= 1
+            self.white_removed += 1
+        else:
+            self.black -= 1
+            self.black_removed += 1
+        
+        self.history.append(('remove', x, y, None, None))
+        self.switch_player()
+        return True, "Piece removed successfully"
+
+    def is_in_mill(self, x, y, player):
+        """Check if a piece is part of a mill"""
+        for mill in self.mills:
+            if (x, y) in mill:
+                if all(self.board[pos[1]][pos[0]] == player for pos in mill):
+                    return True
+        return False
+
     def undo(self):
+        """Undo the last move"""
         if not self.history:
-            return False
-        x, y, nx, ny = self.history.pop()
-        if nx is None:
+            return False, "No moves to undo"
+        
+        action, x, y, nx, ny, mill_formed = self.history.pop()
+        
+        if action == 'place':
             self.board[y][x] = '.'
             self.placed -= 1
-            if self.player == 'W':
+            if self.player == 'B':  # Undoing white's move
                 self.white -= 1
-            else:
+            else:  # Undoing black's move
                 self.black -= 1
-        else:
-            self.board[y][x] = self.player
+        elif action == 'move':
             self.board[ny][nx] = '.'
+            self.board[y][x] = self.player
+        elif action == 'remove':
+            opponent = 'B' if self.player == 'W' else 'W'
+            self.board[y][x] = opponent
+            if opponent == 'W':
+                self.white += 1
+                self.white_removed -= 1
+            else:
+                self.black += 1
+                self.black_removed -= 1
+        
+        # Switch player back
+        self.switch_player()
+        return True, "Move undone"
+
+    def get_valid_moves(self):
+        """Get all valid moves for the current player"""
+        moves = []
+        
+        if self.is_placement_phase():
+            # Placement phase
+            for x in range(7):
+                for y in range(7):
+                    if (x, y) in self.tiles and self.board[y][x] == '.':
+                        moves.append(('place', x, y))
+        else:
+            # Movement phase
+            player_positions = [(x, y) for x in range(7) for y in range(7) 
+                              if self.board[y][x] == self.player]
+            pieces_on_board = len(player_positions)
+            
+            for from_x, from_y in player_positions:
+                if pieces_on_board <= 3:
+                    # Flying - can move anywhere
+                    for to_x in range(7):
+                        for to_y in range(7):
+                            if (to_x, to_y) in self.tiles and self.board[to_y][to_x] == '.':
+                                moves.append(('move', from_x, from_y, to_x, to_y))
+                else:
+                    # Normal movement - adjacent only
+                    for to_x, to_y in self.adjacency[(from_x, from_y)]:
+                        if self.board[to_y][to_x] == '.':
+                            moves.append(('move', from_x, from_y, to_x, to_y))
+        
+        return moves
+
+    def is_game_over(self):
+        """Check if the game is over"""
+        # Only check for game over if we're not in the initial state
+        if self.placed == 0:
+            return False, None
+        
+        # Don't check for game over during placement phase
+        if self.is_placement_phase():
+            return False, None
+        
+        # Check if a player has less than 3 pieces on board
+        if self.white < 3:
+            return True, 'B'  # Black wins
+        if self.black < 3:
+            return True, 'W'  # White wins
+        
+        # Check for no valid moves in movement phase
+        if not self.get_valid_moves():
+            return True, 'B' if self.player == 'W' else 'W'
+        
+        return False, None
+
+    def evaluate_position(self):
+        """Evaluate the current position for minimax"""
+        # Check for immediate wins/losses
+        game_over, winner = self.is_game_over()
+        if game_over:
+            if winner == 'W':
+                return 10000  # White wins
+            else:
+                return -10000  # Black wins
+        
+        score = 0
+        
+        # Piece count difference (very large weight)
+        piece_diff = self.white - self.black
+        score += piece_diff * 1000
+        
+        # Mill formation and preservation
+        white_mills = self.count_mills('W')
+        black_mills = self.count_mills('B')
+        score += white_mills * 500 - black_mills * 500
+        
+        # Two-in-a-row pieces
+        white_twos = self.count_two_in_row('W')
+        black_twos = self.count_two_in_row('B')
+        score += white_twos * 50 - black_twos * 50
+        
+        return score
+
+    def count_mills(self, player):
+        """Count how many mills a player has"""
+        count = 0
+        for mill in self.mills:
+            if all(self.board[pos[1]][pos[0]] == player for pos in mill):
+                count += 1
+        return count
+
+    def count_two_in_row(self, player):
+        """Count two-in-a-row pieces for a player"""
+        count = 0
+        for mill in self.mills:
+            player_pieces = sum(1 for pos in mill if self.board[pos[1]][pos[0]] == player)
+            empty_spaces = sum(1 for pos in mill if self.board[pos[1]][pos[0]] == '.')
+            if player_pieces == 2 and empty_spaces == 1:
+                count += 1
+        return count
+
+    def display_board(self):
+        """Display the current board state"""
+        print("\n" + "="*50)
+        print("MILL GAME SOLVER")
+        print("="*50)
+        
+        # Create visual representation with proper lines and nodes
+        # Based on the exact layout from the image
+        visual = [
+            "*─────*─────*",
+            "│     │     │",
+            "│ *———*———* │",
+            "│ │   │   │ │",
+            "│ │ *─*─* │ │",
+            "│ │ │   │ │ │",
+            "*─*─*   *─*─*",
+            "│ │ │   │ │ │",
+            "│ │ *—*—* │ │",
+            "│ │   │   │ │",
+            "│ *———*———* │",
+            "│     │     │",
+            "*─────*─────*"
+        ]
+        
+        # Create a mapping from board coordinates to visual positions
+        # Simple approach: double the coordinates for display
+        coord_to_visual = {}
+        for x in range(7):
+            for y in range(7):
+                if (x, y) in self.tiles:
+                    coord_to_visual[(x, y)] = (y * 2, x * 2)
+        
+        # Replace nodes with pieces
+        for (x, y), (vx, vy) in coord_to_visual.items():
+            piece = self.board[y][x]
+            if piece == '.':
+                symbol = '*'  # Empty node
+            elif piece == 'W':
+                symbol = 'W'  # White piece
+            elif piece == 'B':
+                symbol = 'B'  # Black piece
+            
+            # Replace the node in the visual representation
+            line = visual[vx]
+            visual[vx] = line[:vy] + symbol + line[vy+1:]
+        
+        for line in visual:
+            print(line)
+        
+        print(f"\nWhite pieces: {self.white} on board, {9 - self.white - self.white_removed} remaining, {self.white_removed} removed")
+        print(f"Black pieces: {self.black} on board, {9 - self.black - self.black_removed} remaining, {self.black_removed} removed")
+        print(f"Current player: {'White' if self.player == 'W' else 'Black'}")
+        
+        if self.is_placement_phase():
+            print("Phase: Placement")
+        else:
+            print("Phase: Movement")
+        
+        print("="*50)
+
+
+class MinimaxAI:
+    def __init__(self, game):
+        self.game = game
+
+    def get_best_move(self, depth):
+        """Get the best move using minimax with alpha-beta pruning"""
+        if self.game.player == 'W':
+            best_score = float('-inf')
+            best_move = None
+            alpha = float('-inf')
+            beta = float('inf')
+            
+            for move in self.game.get_valid_moves():
+                # Make the move
+                game_copy = copy.deepcopy(self.game)
+                if move[0] == 'place':
+                    success, _ = game_copy.place(move[1], move[2])
+                else:
+                    success, _ = game_copy.move(move[1], move[2], move[3], move[4])
+                
+                if success:
+                    score = self.minimax(game_copy, depth - 1, alpha, beta, False)
+                    if score > best_score:
+                        best_score = score
+                        best_move = move
+                    alpha = max(alpha, best_score)
+                    if alpha >= beta:
+                        break
+            
+            return best_move
+        else:
+            best_score = float('inf')
+            best_move = None
+            alpha = float('-inf')
+            beta = float('inf')
+            
+            for move in self.game.get_valid_moves():
+                # Make the move
+                game_copy = copy.deepcopy(self.game)
+                if move[0] == 'place':
+                    success, _ = game_copy.place(move[1], move[2])
+                else:
+                    success, _ = game_copy.move(move[1], move[2], move[3], move[4])
+                
+                if success:
+                    score = self.minimax(game_copy, depth - 1, alpha, beta, True)
+                    if score < best_score:
+                        best_score = score
+                        best_move = move
+                    beta = min(beta, best_score)
+                    if alpha >= beta:
+                        break
+            
+            return best_move
+
+    def minimax(self, game, depth, alpha, beta, is_maximizing):
+        """Minimax algorithm with alpha-beta pruning"""
+        # Terminal conditions
+        game_over, winner = game.is_game_over()
+        if game_over:
+            if winner == 'W':
+                return 10000
+            else:
+                return -10000
+        
+        if depth == 0:
+            return game.evaluate_position()
+        
+        if is_maximizing:
+            max_eval = float('-inf')
+            for move in game.get_valid_moves():
+                game_copy = copy.deepcopy(game)
+                if move[0] == 'place':
+                    success, _ = game_copy.place(move[1], move[2])
+                else:
+                    success, _ = game_copy.move(move[1], move[2], move[3], move[4])
+                
+                if success:
+                    eval_score = self.minimax(game_copy, depth - 1, alpha, beta, False)
+                    max_eval = max(max_eval, eval_score)
+                    alpha = max(alpha, eval_score)
+                    if alpha >= beta:
+                        break
+            return max_eval
+        else:
+            min_eval = float('inf')
+            for move in game.get_valid_moves():
+                game_copy = copy.deepcopy(game)
+                if move[0] == 'place':
+                    success, _ = game_copy.place(move[1], move[2])
+                else:
+                    success, _ = game_copy.move(move[1], move[2], move[3], move[4])
+                
+                if success:
+                    eval_score = self.minimax(game_copy, depth - 1, alpha, beta, True)
+                    min_eval = min(min_eval, eval_score)
+                    beta = min(beta, eval_score)
+                    if alpha >= beta:
+                        break
+            return min_eval
 
 
 def main():
+    def get_user_input(prompt, valid_options):
+        """Get user input with validation"""
+        while True:
+            try:
+                user_input = input(prompt).strip()
+                if user_input in valid_options:
+                    return user_input
+                else:
+                    print(f"Invalid input. Please choose from: {', '.join(valid_options)}")
+            except KeyboardInterrupt:
+                print("\nGoodbye!")
+                exit()
+            except EOFError:
+                print("\nGoodbye!")
+                exit()
+
+    game = Game()
+    ai = MinimaxAI(game)
+    
     print("Welcome to the Mill Game Solver!")
+    print("This is a strategic board game where players try to form mills (three-in-a-row)")
+    print("and remove opponent pieces. The game has two phases: placement and movement.")
+    
+    while True:
+        # Check if no game is in progress
+        if not game.game_started:
+            choice = get_user_input("\nWould you like to (1) start a new game or (2) quit? ", ['1', '2'])
+            if choice == '1':
+                game.start()
+                continue
+            else:
+                print("Thanks for playing!")
+                break
+        
+        # Check if game is over
+        game_over, winner = game.is_game_over()
+        if game_over:
+            game.display_board()
+            print(f"\nGame Over! {'White' if winner == 'W' else 'Black'} wins!")
+            choice = get_user_input("\nWould you like to (1) start a new game or (2) quit? ", ['1', '2'])
+            if choice == '1':
+                game.start()
+                continue
+            else:
+                print("Thanks for playing!")
+                break
+        
+        # Display current board
+        game.display_board()
+        
+        # Game in progress - get user choice
+        choice = get_user_input("\nChoose an action:\n(1) Take action\n(2) Let computer decide\n(3) Undo last move\n(4) Restart game\n(5) Quit\nYour choice: ", ['1', '2', '3', '4', '5'])
+        
+        if choice == '1':  # User takes action
+            if game.is_placement_phase():
+                print(f"\nPlacement phase - {game.player} to place a piece")
+                try:
+                    x = int(input("Enter x-coordinate (0-6): "))
+                    y = int(input("Enter y-coordinate (0-6): "))
+                    success, message = game.place(x, y)
+                    if not success:
+                        print(f"Error: {message}")
+                    else:
+                        print(message)
+                        # If mill was formed, require piece removal
+                        if "Mill formed" in message:
+                            piece_removed = False
+                            while not piece_removed:
+                                try:
+                                    rx = int(input("Enter x-coordinate to remove opponent piece (0-6): "))
+                                    ry = int(input("Enter y-coordinate to remove opponent piece (0-6): "))
+                                    success, message = game.remove_piece(rx, ry)
+                                    if not success:
+                                        print(f"Error: {message}")
+                                        print("Please try again.")
+                                    else:
+                                        print(message)
+                                        piece_removed = True
+                                except ValueError:
+                                    print("Invalid input. Please enter numbers between 0 and 6.")
+                except ValueError:
+                    print("Invalid input. Please enter numbers between 0 and 6.")
+            else:
+                print(f"\nMovement phase - {game.player} to move a piece")
+                try:
+                    from_x = int(input("Enter source x-coordinate (0-6): "))
+                    from_y = int(input("Enter source y-coordinate (0-6): "))
+                    to_x = int(input("Enter destination x-coordinate (0-6): "))
+                    to_y = int(input("Enter destination y-coordinate (0-6): "))
+                    success, message = game.move(from_x, from_y, to_x, to_y)
+                    if not success:
+                        print(f"Error: {message}")
+                    else:
+                        print(message)
+                        # If mill was formed, require piece removal
+                        if "Mill formed" in message:
+                            piece_removed = False
+                            while not piece_removed:
+                                try:
+                                    rx = int(input("Enter x-coordinate to remove opponent piece (0-6): "))
+                                    ry = int(input("Enter y-coordinate to remove opponent piece (0-6): "))
+                                    success, message = game.remove_piece(rx, ry)
+                                    if not success:
+                                        print(f"Error: {message}")
+                                        print("Please try again.")
+                                    else:
+                                        print(message)
+                                        piece_removed = True
+                                except ValueError:
+                                    print("Invalid input. Please enter numbers between 0 and 6.")
+                except ValueError:
+                    print("Invalid input. Please enter numbers between 0 and 6.")
+        
+        elif choice == '2':  # Computer decides
+            depth = int(input("Enter search depth (1-5 recommended): "))
+            print(f"\nComputer ({game.player}) is thinking...")
+            best_move = ai.get_best_move(depth)
+            
+            if best_move:
+                if best_move[0] == 'place':
+                    success, message = game.place(best_move[1], best_move[2])
+                    print(f"Computer places piece at ({best_move[1]}, {best_move[2]})")
+                else:
+                    success, message = game.move(best_move[1], best_move[2], best_move[3], best_move[4])
+                    print(f"Computer moves piece from ({best_move[1]}, {best_move[2]}) to ({best_move[3]}, {best_move[4]})")
+                
+                if success:
+                    print(message)
+                    # If mill was formed, computer removes a piece
+                    if "Mill formed" in message:
+                        print("Mill detected - attempting piece removal...")
+                        # Simple AI for piece removal - remove first available piece
+                        opponent = 'B' if game.player == 'W' else 'W'
+                        piece_removed = False
+                        for x in range(7):
+                            for y in range(7):
+                                if game.board[y][x] == opponent:
+                                    success, message = game.remove_piece(x, y)
+                                    if success:
+                                        print(f"Computer removes piece at ({x}, {y})")
+                                        piece_removed = True
+                                        break
+                            if piece_removed:
+                                break
+                        if not piece_removed:
+                            print("Computer could not remove any opponent pieces")
+            else:
+                print("No valid moves found!")
+        
+        elif choice == '3':  # Undo
+            success, message = game.undo()
+            if not success:
+                print(f"Error: {message}")
+            else:
+                print("Last move undone.")
+        
+        elif choice == '4':  # Restart
+            game.start()
+            print("Game restarted.")
+        
+        elif choice == '5':  # Quit
+            print("Thanks for playing!")
+            break
 
 
 if __name__ == "__main__":
