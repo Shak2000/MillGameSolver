@@ -27,6 +27,12 @@ class Game:
         if self.placed > 17 or (x, y) not in self.tiles or self.board[y][x] != '.':
             return False
         self.board[y][x] = self.player
+        self.placed += 1
+        if self.player == 'W':
+            self.white += 1
+        else:
+            self.black += 1
+        self.history.append((x, y, None, None))
         return True
 
     def move(self, x, y, nx, ny):
@@ -35,7 +41,23 @@ class Game:
             return False
         self.board[y][x] = '.'
         self.board[ny][nx] = self.player
+        self.history.append((x, y, nx, ny))
         return True
+    
+    def undo(self):
+        if not self.history:
+            return False
+        x, y, nx, ny = self.history.pop()
+        if nx is None:
+            self.board[y][x] = '.'
+            self.placed -= 1
+            if self.player == 'W':
+                self.white -= 1
+            else:
+                self.black -= 1
+        else:
+            self.board[y][x] = self.player
+            self.board[ny][nx] = '.'
 
 
 def main():
