@@ -31,36 +31,37 @@ class Game:
         self.game_started = False  # Track if a game has been started
         
         # Define adjacency for each position based on the image
+        # Only positions connected by lines are adjacent
         self.adjacency = {
-            # Outer Square (8 points)
-            (0, 0): [(0, 3), (3, 0)],
-            (0, 3): [(0, 0), (0, 6), (1, 3)],
-            (0, 6): [(0, 3), (3, 6)],
-            (3, 0): [(0, 0), (3, 1), (6, 0)],
-            (3, 6): [(0, 6), (3, 5), (6, 6)],
-            (6, 0): [(3, 0), (6, 3)],
-            (6, 3): [(5, 3), (6, 0), (6, 6)],
-            (6, 6): [(3, 6), (6, 3)],
+            # Outer Square (8 points) - corners and midpoints
+            (0, 0): [(0, 3), (3, 0)],  # Top-left corner
+            (0, 3): [(0, 0), (0, 6), (1, 3)],  # Top middle
+            (0, 6): [(0, 3), (3, 6)],  # Top-right corner
+            (3, 0): [(0, 0), (6, 0)],  # Left middle
+            (3, 6): [(0, 6), (6, 6)],  # Right middle
+            (6, 0): [(3, 0), (6, 3)],  # Bottom-left corner
+            (6, 3): [(6, 0), (6, 6), (5, 3)],  # Bottom middle
+            (6, 6): [(3, 6), (6, 3)],  # Bottom-right corner
             
-            # Middle Square (8 points)
-            (1, 1): [(1, 3), (3, 1)],
-            (1, 3): [(0, 3), (1, 1), (1, 5), (2, 3)],
-            (1, 5): [(1, 3), (3, 5)],
-            (3, 1): [(1, 1), (3, 0), (3, 2), (5, 1)],
-            (3, 5): [(1, 5), (3, 4), (3, 6), (5, 5)],
-            (5, 1): [(3, 1), (5, 3)],
-            (5, 3): [(4, 3), (5, 1), (5, 5), (6, 3)],
-            (5, 5): [(3, 5), (5, 3)],
+            # Middle Square (8 points) - corners and midpoints
+            (1, 1): [(1, 3), (3, 1)],  # Inner top-left
+            (1, 3): [(0, 3), (1, 1), (1, 5), (2, 3)],  # Inner top middle
+            (1, 5): [(1, 3), (3, 5)],  # Inner top-right
+            (3, 1): [(1, 1), (3, 0), (3, 2), (5, 1)],  # Inner left middle
+            (3, 5): [(1, 5), (3, 6), (5, 5)],  # Inner right middle
+            (5, 1): [(3, 1), (5, 3)],  # Inner bottom-left
+            (5, 3): [(6, 3), (5, 1), (5, 5), (4, 3)],  # Inner bottom middle
+            (5, 5): [(3, 5), (5, 3)],  # Inner bottom-right
             
-            # Inner Square (8 points)
-            (2, 2): [(2, 3), (3, 2)],
-            (2, 3): [(1, 3), (2, 2), (2, 4)],
-            (2, 4): [(2, 3), (3, 4)],
-            (3, 2): [(2, 2), (3, 1), (4, 2)],
-            (3, 4): [(2, 4), (3, 5), (4, 4)],
-            (4, 2): [(3, 2), (4, 3)],
-            (4, 3): [(2, 3), (4, 2), (4, 4), (5, 3)],
-            (4, 4): [(3, 4), (4, 3)]
+            # Inner Square (8 points) - corners and midpoints
+            (2, 2): [(2, 3), (3, 2)],  # Center top-left
+            (2, 3): [(1, 3), (2, 2), (2, 4)],  # Center top middle
+            (2, 4): [(2, 3), (3, 4)],  # Center top-right
+            (3, 2): [(2, 2), (3, 1), (4, 2)],  # Center left middle
+            (3, 4): [(2, 4), (3, 5), (4, 4)],  # Center right middle
+            (4, 2): [(3, 2), (4, 3)],  # Center bottom-left
+            (4, 3): [(2, 3), (4, 2), (4, 4), (5, 3)],  # Center bottom middle
+            (4, 4): [(3, 4), (4, 3)]   # Center bottom-right
         }
         
         # Define all possible mills (three-in-a-row)
@@ -314,32 +315,80 @@ class Game:
         return False, None
 
     def evaluate_position(self):
-        """Evaluate the current position for minimax"""
-        # Check for immediate wins/losses
+        """Evaluate position using exact priority system"""
+        # 1. Immediately winning
         game_over, winner = self.is_game_over()
         if game_over:
             if winner == 'W':
-                return 10000  # White wins
+                return 1000000  # White wins
             else:
-                return -10000  # Black wins
+                return -1000000  # Black wins
         
         score = 0
         
-        # Piece count difference (very large weight)
-        piece_diff = self.white - self.black
-        score += piece_diff * 1000
+        # 2. Preventing opponent from immediately winning
+        white_prevents_loss = self.can_prevent_immediate_loss('W')
+        black_prevents_loss = self.can_prevent_immediate_loss('B')
+        if white_prevents_loss:
+            score += 900000
+        if black_prevents_loss:
+            score -= 900000
         
-        # Mill formation and preservation
+        # 3. Creating a mill
+        white_creates_mill = self.can_create_mill('W')
+        black_creates_mill = self.can_create_mill('B')
+        if white_creates_mill:
+            score += 800000
+        if black_creates_mill:
+            score -= 800000
+        
+        # 4. Blocking opponent's 2-in-a-row
+        white_blocks_mill = self.can_block_opponent_mill('W')
+        black_blocks_mill = self.can_block_opponent_mill('B')
+        if white_blocks_mill:
+            score += 700000
+        if black_blocks_mill:
+            score -= 700000
+        
+        # 5. Maintaining a mill
         white_mills = self.count_mills('W')
         black_mills = self.count_mills('B')
-        score += white_mills * 500 - black_mills * 500
+        score += white_mills * 600000 - black_mills * 600000
         
-        # Two-in-a-row pieces
+        # 6. Having an unblocked 2-in-a-row
         white_twos = self.count_two_in_row('W')
         black_twos = self.count_two_in_row('B')
-        score += white_twos * 50 - black_twos * 50
+        score += white_twos * 500000 - black_twos * 500000
         
         return score
+
+    def count_immediate_mill_opportunities(self, player):
+        """Count immediate mill formation opportunities (can form mill in next move)"""
+        count = 0
+        for mill in self.mills:
+            player_pieces = sum(1 for pos in mill if self.board[pos[1]][pos[0]] == player)
+            empty_spaces = sum(1 for pos in mill if self.board[pos[1]][pos[0]] == '.')
+            if player_pieces == 2 and empty_spaces == 1:
+                # Check if we can place/move to the empty space
+                empty_pos = None
+                for pos in mill:
+                    if self.board[pos[1]][pos[0]] == '.':
+                        empty_pos = pos
+                        break
+                
+                if empty_pos:
+                    # Check if this position is reachable in the next move
+                    if self.is_placement_phase():
+                        count += 1  # Can place anywhere
+                    else:
+                        # Check if any of our pieces can move to this position
+                        player_positions = [(x, y) for x in range(7) for y in range(7) 
+                                          if self.board[y][x] == player]
+                        for px, py in player_positions:
+                            if self.can_move_to(px, py, empty_pos[0], empty_pos[1]):
+                                count += 1
+                                break
+        return count
 
     def count_mills(self, player):
         """Count how many mills a player has"""
@@ -358,6 +407,132 @@ class Game:
             if player_pieces == 2 and empty_spaces == 1:
                 count += 1
         return count
+
+    def can_move_to(self, from_x, from_y, to_x, to_y):
+        """Check if a piece can move from one position to another"""
+        if not self.is_valid_move(from_x, from_y, to_x, to_y):
+            return False
+        return self.board[to_y][to_x] == '.'
+
+    def get_opponent_mill_threats(self, player):
+        """Get opponent pieces that can form mills next turn"""
+        opponent = 'B' if player == 'W' else 'W'
+        threats = []
+        
+        for mill in self.mills:
+            opponent_pieces = sum(1 for pos in mill if self.board[pos[1]][pos[0]] == opponent)
+            empty_spaces = sum(1 for pos in mill if self.board[pos[1]][pos[0]] == '.')
+            if opponent_pieces == 2 and empty_spaces == 1:
+                # Find the empty position
+                for pos in mill:
+                    if self.board[pos[1]][pos[0]] == '.':
+                        # Find opponent pieces that can move to this position
+                        opponent_positions = [(x, y) for x in range(7) for y in range(7) 
+                                            if self.board[y][x] == opponent]
+                        for ox, oy in opponent_positions:
+                            if self.can_move_to(ox, oy, pos[0], pos[1]):
+                                threats.append((ox, oy))
+        return threats
+
+    def can_prevent_immediate_loss(self, player):
+        """Check if player can prevent immediate loss"""
+        opponent = 'B' if player == 'W' else 'W'
+        
+        # Check if opponent can win by reducing pieces to less than 3
+        opponent_pieces = self.black if opponent == 'B' else self.white
+        my_pieces = self.white if player == 'W' else self.black
+        
+        if opponent_pieces <= 3 and my_pieces <= 3:
+            # Check if opponent can remove enough pieces to win
+            return True
+        
+        # Check if opponent can block all our moves
+        if not self.is_placement_phase():
+            my_valid_moves = 0
+            my_positions = [(x, y) for x in range(7) for y in range(7) 
+                           if self.board[y][x] == player]
+            for px, py in my_positions:
+                for to_x in range(7):
+                    for to_y in range(7):
+                        if (to_x, to_y) in self.tiles and self.board[to_y][to_x] == '.':
+                            if self.can_move_to(px, py, to_x, to_y):
+                                my_valid_moves += 1
+                                break
+                    if my_valid_moves > 0:
+                        break
+                if my_valid_moves > 0:
+                    break
+            
+            if my_valid_moves == 0:
+                return True
+        
+        return False
+
+    def can_create_mill(self, player):
+        """Check if player can create a mill in next move"""
+        for mill in self.mills:
+            player_pieces = sum(1 for pos in mill if self.board[pos[1]][pos[0]] == player)
+            empty_spaces = sum(1 for pos in mill if self.board[pos[1]][pos[0]] == '.')
+            if player_pieces == 2 and empty_spaces == 1:
+                # Check if we can place/move to the empty space
+                for pos in mill:
+                    if self.board[pos[1]][pos[0]] == '.':
+                        if self.is_placement_phase():
+                            return True
+                        else:
+                            # Check if any of our pieces can move to this position
+                            player_positions = [(x, y) for x in range(7) for y in range(7) 
+                                              if self.board[y][x] == player]
+                            for px, py in player_positions:
+                                if self.can_move_to(px, py, pos[0], pos[1]):
+                                    return True
+                        break
+        return False
+
+    def can_block_opponent_mill(self, player):
+        """Check if player can block opponent's 2-in-a-row"""
+        opponent = 'B' if player == 'W' else 'W'
+        
+        for mill in self.mills:
+            opponent_pieces = sum(1 for pos in mill if self.board[pos[1]][pos[0]] == opponent)
+            empty_spaces = sum(1 for pos in mill if self.board[pos[1]][pos[0]] == '.')
+            if opponent_pieces == 2 and empty_spaces == 1:
+                # Find the empty position that would complete opponent's mill
+                for pos in mill:
+                    if self.board[pos[1]][pos[0]] == '.':
+                        # Check if we can place/move to this position
+                        if self.is_placement_phase():
+                            return True
+                        else:
+                            # Check if any of our pieces can move to this position
+                            player_positions = [(x, y) for x in range(7) for y in range(7) 
+                                              if self.board[y][x] == player]
+                            for px, py in player_positions:
+                                if self.can_move_to(px, py, pos[0], pos[1]):
+                                    return True
+                        break
+        return False
+
+
+
+    def will_move_form_mill(self, move):
+        """Check if a specific move will form a mill"""
+        if move[0] == 'place':
+            x, y = move[1], move[2]
+        else:
+            x, y = move[3], move[4]  # Destination coordinates
+        
+        # Temporarily place the piece
+        original_piece = self.board[y][x]
+        self.board[y][x] = self.player
+        
+        # Check if this forms a mill
+        mill_formed = self.check_mill(x, y)
+        
+        # Restore the board
+        self.board[y][x] = original_piece
+        
+        return mill_formed
 
     def display_board(self):
         """Display the current board state"""
@@ -425,101 +600,10 @@ class MinimaxAI:
         self.game = game
 
     def get_best_move(self, depth):
-        """Get the best move using minimax with alpha-beta pruning"""
-        if self.game.player == 'W':
-            best_score = float('-inf')
-            best_move = None
-            alpha = float('-inf')
-            beta = float('inf')
-            
-            for move in self.game.get_valid_moves():
-                # Make the move
-                game_copy = copy.deepcopy(self.game)
-                if move[0] == 'place':
-                    success, _ = game_copy.place(move[1], move[2])
-                else:
-                    success, _ = game_copy.move(move[1], move[2], move[3], move[4])
-                
-                if success:
-                    score = self.minimax(game_copy, depth - 1, alpha, beta, False)
-                    if score > best_score:
-                        best_score = score
-                        best_move = move
-                    alpha = max(alpha, best_score)
-                    if alpha >= beta:
-                        break
-            
-            return best_move
-        else:
-            best_score = float('inf')
-            best_move = None
-            alpha = float('-inf')
-            beta = float('inf')
-            
-            for move in self.game.get_valid_moves():
-                # Make the move
-                game_copy = copy.deepcopy(self.game)
-                if move[0] == 'place':
-                    success, _ = game_copy.place(move[1], move[2])
-                else:
-                    success, _ = game_copy.move(move[1], move[2], move[3], move[4])
-                
-                if success:
-                    score = self.minimax(game_copy, depth - 1, alpha, beta, True)
-                    if score < best_score:
-                        best_score = score
-                        best_move = move
-                    beta = min(beta, best_score)
-                    if alpha >= beta:
-                        break
-            
-            return best_move
+        pass
 
     def minimax(self, game, depth, alpha, beta, is_maximizing):
-        """Minimax algorithm with alpha-beta pruning"""
-        # Terminal conditions
-        game_over, winner = game.is_game_over()
-        if game_over:
-            if winner == 'W':
-                return 10000
-            else:
-                return -10000
-        
-        if depth == 0:
-            return game.evaluate_position()
-        
-        if is_maximizing:
-            max_eval = float('-inf')
-            for move in game.get_valid_moves():
-                game_copy = copy.deepcopy(game)
-                if move[0] == 'place':
-                    success, _ = game_copy.place(move[1], move[2])
-                else:
-                    success, _ = game_copy.move(move[1], move[2], move[3], move[4])
-                
-                if success:
-                    eval_score = self.minimax(game_copy, depth - 1, alpha, beta, False)
-                    max_eval = max(max_eval, eval_score)
-                    alpha = max(alpha, eval_score)
-                    if alpha >= beta:
-                        break
-            return max_eval
-        else:
-            min_eval = float('inf')
-            for move in game.get_valid_moves():
-                game_copy = copy.deepcopy(game)
-                if move[0] == 'place':
-                    success, _ = game_copy.place(move[1], move[2])
-                else:
-                    success, _ = game_copy.move(move[1], move[2], move[3], move[4])
-                
-                if success:
-                    eval_score = self.minimax(game_copy, depth - 1, alpha, beta, True)
-                    min_eval = min(min_eval, eval_score)
-                    beta = min(beta, eval_score)
-                    if alpha >= beta:
-                        break
-            return min_eval
+        pass
 
 
 def main():
@@ -654,19 +738,33 @@ def main():
                     # If mill was formed, computer removes a piece
                     if "Mill formed" in message:
                         print("Mill detected - attempting piece removal...")
-                        # Simple AI for piece removal - remove first available piece
+                        # Aggressive AI for piece removal - prioritize opponent mill threats
                         opponent = 'B' if game.player == 'W' else 'W'
                         piece_removed = False
-                        for x in range(7):
-                            for y in range(7):
-                                if game.board[y][x] == opponent:
-                                    success, message = game.remove_piece(x, y)
-                                    if success:
-                                        print(f"Computer removes piece at ({x}, {y})")
-                                        piece_removed = True
-                                        break
-                            if piece_removed:
-                                break
+                        
+                        # First, try to remove opponent pieces that can form mills next turn
+                        mill_threats = game.get_opponent_mill_threats(game.player)
+                        for x, y in mill_threats:
+                            if game.board[y][x] == opponent:
+                                success, message = game.remove_piece(x, y)
+                                if success:
+                                    print(f"Computer removes threatening piece at ({x}, {y})")
+                                    piece_removed = True
+                                    break
+                        
+                        # If no mill threats removed, remove any available piece
+                        if not piece_removed:
+                            for x in range(7):
+                                for y in range(7):
+                                    if game.board[y][x] == opponent:
+                                        success, message = game.remove_piece(x, y)
+                                        if success:
+                                            print(f"Computer removes piece at ({x}, {y})")
+                                            piece_removed = True
+                                            break
+                                if piece_removed:
+                                    break
+                        
                         if not piece_removed:
                             print("Computer could not remove any opponent pieces")
             else:
